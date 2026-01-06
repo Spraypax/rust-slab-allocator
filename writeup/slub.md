@@ -110,28 +110,101 @@ Ces états permettent à l’allocateur de choisir rapidement un slab
 approprié lors d’une allocation ou d’une libération.
 
 ## 3. Structures et données clés (SLUB)
-> But : identifier “où sont les pointeurs” et “où est l’état”
-### 3.1 kmem_cache (le cache)
-- Champs importants (taille objet, align, flags, etc.)
-- Paramètres runtime (debug/hardening)
 
-### 3.2 Page/slab metadata
-- Comment une page représente un slab dans SLUB
-- Où sont stockés : freelist, compteur d’objets, état slab
+Cette section décrit les structures principales utilisées par SLUB, avec un focus sur
+les champs critiques du point de vue sécurité et exploitation.
+
+### 3.1 kmem_cache : le cache
+
+La structure `kmem_cache` représente un cache d’objets d’une taille donnée.
+Elle contient notamment :
+- la taille de l’objet,
+- l’alignement,
+- des flags de configuration (debug, hardening),
+- des pointeurs vers des listes de slabs (partiellement utilisés, etc.).
+
+D’un point de vue exploitation, le cache définit :
+- le **type d’objet** manipulé,
+- la **taille exacte** des allocations,
+- les règles de recyclage des objets.
+
+Un attaquant cherche souvent à influencer **dans quel cache** une allocation se produit,
+afin de provoquer une confusion de type ou une réutilisation contrôlée.
+
+### 3.2 Slab et métadonnées de page
+
+Dans SLUB, un slab est généralement représenté par une ou plusieurs pages mémoire.
+Les métadonnées associées au slab sont stockées dans la structure `page`.
+
+Ces métadonnées incluent :
+- un pointeur vers la freelist du slab,
+- le nombre d’objets libres ou utilisés,
+- l’état du slab (full, partial, free),
+- des liens vers d’autres slabs du même cache.
+
+Ces informations sont critiques : leur corruption peut mener à des allocations arbitraires
+ou à une perte de contrôle du flux d’allocation.
 
 ### 3.3 Freelist intrusive
-- Principe : le next pointer est stocké dans l’objet libre
-- Conséquences : UAF, double free, overflow → freelist corruption
+
+SLUB utilise une **freelist intrusive** :
+lorsqu’un objet est libre, les premiers octets de l’objet sont utilisés pour stocker
+un pointeur vers le prochain objet libre.
+
+Cela implique que :
+- la mémoire de l’objet libre contient un pointeur valide,
+- toute corruption de l’objet libre peut affecter la freelist,
+- les bugs de type UAF, double free ou overflow peuvent manipuler ce pointeur.
+
+La freelist est donc une cible privilégiée pour les exploits kernel,
+car elle contrôle directement quelle adresse sera retournée lors de la prochaine allocation.
 
 ## 4. Chemins d’allocation : fast path vs slow path
-### 4.1 Fast path (per-cpu / allocation locale)
-- Pourquoi per-cpu : éviter locks, latence
-- Obtenir un objet depuis la freelist locale
 
-### 4.2 Slow path (refill / nouvelle page / état partial)
-- Refill depuis partial
-- Allocation de nouvelles pages au besoin
-- Retour d’objets au cache global
+SLUB distingue deux chemins principaux pour l’allocation :
+le **fast path**, optimisé pour les performances, et le **slow path**,
+utilisé lorsque les ressources locales sont insuffisantes.
+
+### 4.1 Fast path
+
+Le fast path est utilisé lorsque :
+- un objet libre est disponible dans le cache local (souvent per-cpu),
+- aucune synchronisation globale lourde n’est nécessaire.
+
+Dans ce cas, l’allocateur :
+1. lit le pointeur de tête de la freelist,
+2. met à jour la freelist pour pointer vers l’objet suivant,
+3. retourne l’objet à l’appelant.
+
+Ce chemin est extrêmement rapide, mais repose sur des hypothèses fortes :
+- la freelist est cohérente,
+- les pointeurs stockés sont valides.
+
+Toute corruption de la freelist a donc un impact immédiat.
+
+### 4.2 Slow path
+
+Le slow path est emprunté lorsque :
+- la freelist locale est vide,
+- ou lorsqu’une synchronisation avec l’état global est nécessaire.
+
+Dans ce cas, SLUB peut :
+- récupérer un slab partiellement utilisé,
+- allouer une nouvelle page via l’allocateur de pages,
+- initialiser une nouvelle freelist,
+- mettre à jour les structures globales du cache.
+
+Le slow path est plus coûteux et implique davantage de vérifications et de synchronisation,
+mais il reste vulnérable à la corruption des métadonnées de slab.
+
+### 4.3 Implications sécurité
+
+Du point de vue sécurité :
+- le fast path est souvent la cible principale, car il effectue peu de vérifications,
+- le slow path est plus robuste mais plus complexe.
+
+Comprendre quel chemin est emprunté dans un scénario donné est essentiel
+pour raisonner sur la fiabilité et la reproductibilité d’un exploit.
 
 ## 5. Libération : retour freelist + interactions per-cpu
 ### 5.1 Fast free (local)
