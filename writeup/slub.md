@@ -314,34 +314,80 @@ mais augmentent fortement la complexité des exploits :
 - dépendance à la configuration kernel.
 
 ## 8. Parallèle avec notre allocateur minimal Rust `no_std`
-> Section OBLIGATOIRE : faire correspondre “SLUB Linux” ↔ “notre code”
-### 8.1 Ce que nous implémentons
-- Caches de tailles fixes : 8..2048
-- PageProvider 4096 bytes
-- Freelist intrusive
-- alloc(layout) / dealloc(ptr, layout)
 
-### 8.2 Ce que nous n’implémentons PAS (et pourquoi)
-- per-cpu caches
-- états full/partial/free sophistiqués
-- hardening avancé
-- chemins lock-free
+Notre projet implémente un allocateur slab minimal inspiré de SLUB,
+dans un contexte volontairement simplifié.
 
-### 8.3 Tableau de correspondance
-| Concept SLUB Linux | Rôle | Notre implémentation |
-|---|---|---|
+### 8.1 Éléments implémentés
+
+Notre allocateur reprend les concepts fondamentaux de SLUB :
+- **caches d’objets de tailles fixes** (8 à 2048 bytes),
+- **allocation par pages** via un PageProvider (4096 bytes),
+- **découpage des pages en objets**,
+- **freelist intrusive**, stockée directement dans les objets libres,
+- API minimale `alloc(layout)` / `dealloc(ptr, layout)`.
+
+Ces éléments permettent de reproduire le cycle de vie essentiel
+des objets gérés par un allocateur slab.
+
+### 8.2 Éléments volontairement absents
+
+Afin de rester minimal et pédagogique, certaines fonctionnalités de SLUB
+ne sont pas implémentées :
+- caches per-cpu,
+- gestion fine des états full/partial/free,
+- mécanismes avancés de synchronisation,
+- hardening (poisoning, randomisation).
+
+Ces absences sont assumées et documentées.
+
+### 8.3 Correspondance conceptuelle
+
+| SLUB Linux | Rôle | Notre implémentation |
+|-----------|------|---------------------|
 | kmem_cache | cache par type/taille | `Cache` |
-| page/slab | backing store | `Slab` |
+| slab/page | backing store | `Slab` |
 | freelist intrusive | objets libres | `FreeList` |
-| per-cpu | fast path sans lock | (absent ou simplifié) |
-| partial list | réservoir global | (simplifié) |
+| per-cpu cache | fast path | non implémenté |
+| partial list | réservoir global | simplifié |
 
-## 9. Mini “exploit mindset” (sans implémenter d’exploit)
-### 9.1 Où frapper : freelist, metadata, recycles
-### 9.2 Pourquoi slab allocators sont des cibles
-### 9.3 Ce que SLUB hardening change
+Ce parallèle permet de relier directement les concepts théoriques
+à une implémentation concrète.
 
-## 10. Références (liens et crédits)
-- Docs / articles
-- Code/kernel refs (si cités)
-- Tout code externe utilisé dans le projet (si applicable)
+## 9. Mini “exploit mindset”
+
+Sans implémenter d’exploit, il est possible d’identifier
+les zones critiques d’un allocateur slab.
+
+### 9.1 Zones d’intérêt
+
+Les cibles principales sont :
+- la freelist intrusive,
+- les métadonnées de slab/page,
+- les mécanismes de recyclage des objets.
+
+Ces zones contrôlent directement le comportement de l’allocateur.
+
+### 9.2 Pourquoi les allocateurs slab sont ciblés
+
+Les allocateurs slab sont attractifs pour l’exploitation car :
+- ils manipulent de nombreux pointeurs,
+- les objets sont réutilisés rapidement,
+- les erreurs de type UAF ou double free ont des effets immédiats.
+
+### 9.3 Impact du hardening
+
+Le hardening ne supprime pas les bugs,
+mais réduit les primitives exploitables :
+- la corruption devient moins directe,
+- les exploits sont plus complexes et dépendants du contexte.
+
+Comprendre ces mécanismes est essentiel pour analyser
+la faisabilité réelle d’un exploit.
+
+## 10. Références
+
+- Documentation du kernel Linux (mm, slab, slub)
+- Code source du kernel Linux (mm/slub.c)
+- Articles et présentations sur les allocateurs slab
+- Ressources de formation sur l’exploitation kernel
