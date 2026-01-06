@@ -206,22 +206,112 @@ Du point de vue sécurité :
 Comprendre quel chemin est emprunté dans un scénario donné est essentiel
 pour raisonner sur la fiabilité et la reproductibilité d’un exploit.
 
-## 5. Libération : retour freelist + interactions per-cpu
-### 5.1 Fast free (local)
-### 5.2 Slow free (drain/partial/global)
-### 5.3 Problèmes classiques : double free, UAF, type confusion
+## 5. Libération : retour des objets et recyclage
 
-## 6. Concurrence et synchronisation (points importants)
-### 6.1 Pourquoi SLUB est conçu pour réduire la contention
-### 6.2 Per-cpu caches et “ownership” d’une freelist locale
-### 6.3 Effets sur la reproductibilité d’un exploit
+La libération d’un objet dans SLUB consiste à remettre l’objet dans la freelist
+du cache correspondant, afin qu’il puisse être réutilisé ultérieurement.
 
-## 7. Hardening / sécurité (anti-exploitation)
-> But : comprendre ce que l’exploit doit contourner
-### 7.1 Freelist poisoning / encoding
-### 7.2 Randomisation (ex: order/random freelist)
-### 7.3 Checks d’intégrité et debug options (KASAN/KFENCE, etc.)
-### 7.4 Impact concret sur UAF / double free / overflow
+### 5.1 Fast free
+
+Dans le cas le plus courant, l’objet est libéré vers une freelist locale
+(souvent per-cpu). Le processus est simple :
+1. l’objet libéré est traité comme un objet libre,
+2. un pointeur vers l’ancienne tête de freelist est écrit dans l’objet,
+3. l’objet devient la nouvelle tête de la freelist.
+
+Ce chemin est très rapide et implique peu de vérifications.
+
+### 5.2 Slow free
+
+Le slow free est utilisé lorsque :
+- le cache local est saturé,
+- ou lorsque le slab doit être déplacé entre différents états
+(partial, free, etc.).
+
+Dans ce cas, l’objet peut être rendu à une structure globale,
+impliquant davantage de synchronisation et de gestion d’état.
+
+### 5.3 Problèmes classiques liés à la libération
+
+Les bugs liés à la libération sont parmi les plus dangereux :
+- **double free** : insertion multiple du même objet dans la freelist,
+- **use-after-free (UAF)** : écriture dans un objet déjà libéré,
+- **type confusion** : réutilisation d’un objet pour un type différent.
+
+Ces bugs permettent souvent de corrompre la freelist ou les métadonnées du slab,
+ouvrant la voie à des allocations contrôlées.
+
+## 6. Concurrence et synchronisation
+
+SLUB est conçu pour fonctionner efficacement sur des systèmes multi-cœurs.
+La concurrence est un facteur clé de sa conception.
+
+### 6.1 Réduction de la contention
+
+Pour éviter des verrous globaux coûteux, SLUB privilégie :
+- des caches locaux (souvent per-cpu),
+- des chemins d’exécution courts pour les opérations courantes.
+
+Cela permet d’améliorer les performances, mais rend le comportement
+plus complexe à analyser.
+
+### 6.2 Effets sur la reproductibilité
+
+Du point de vue exploitation :
+- les freelists per-cpu rendent le comportement dépendant du CPU courant,
+- les migrations de tâches peuvent changer le cache utilisé,
+- l’état global du système influence fortement l’issue d’une allocation.
+
+Ces facteurs rendent les exploits plus difficiles à rendre déterministes.
+
+### 6.3 Simplification dans notre projet
+
+Dans notre implémentation minimale, nous ne reproduisons pas cette complexité :
+- pas de per-cpu caches,
+- modèle de concurrence simplifié ou absent.
+
+Cela permet de se concentrer sur les mécanismes fondamentaux
+sans introduire de non-déterminisme inutile.
+
+## 7. Hardening et protections
+
+SLUB intègre plusieurs mécanismes visant à compliquer l’exploitation
+des corruptions mémoire.
+
+### 7.1 Freelist poisoning
+
+Pour éviter la corruption directe de la freelist, SLUB peut :
+- encoder les pointeurs de freelist (XOR, cookie),
+- vérifier leur validité lors de l’allocation.
+
+Cela empêche un attaquant de placer facilement une adresse arbitraire
+dans la freelist.
+
+### 7.2 Randomisation
+
+SLUB peut introduire de la randomisation :
+- ordre des objets dans un slab,
+- emplacement des slabs en mémoire.
+
+Ces mécanismes réduisent la prédictibilité du layout mémoire.
+
+### 7.3 Vérifications et debug
+
+En configuration debug, SLUB peut :
+- détecter les double free,
+- détecter certaines UAF,
+- vérifier l’intégrité des métadonnées.
+
+Des outils comme KASAN ou KFENCE renforcent ces protections,
+au prix de performances.
+
+### 7.4 Impact sur l’exploitation
+
+Ces protections ne rendent pas les bugs impossibles,
+mais augmentent fortement la complexité des exploits :
+- nécessité de primitives plus puissantes,
+- contournement des vérifications,
+- dépendance à la configuration kernel.
 
 ## 8. Parallèle avec notre allocateur minimal Rust `no_std`
 > Section OBLIGATOIRE : faire correspondre “SLUB Linux” ↔ “notre code”
