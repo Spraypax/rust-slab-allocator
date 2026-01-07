@@ -36,3 +36,57 @@ pub fn alloc_global(layout: Layout) -> *mut u8 {
 pub fn dealloc_global(ptr: *mut u8, layout: Layout) {
     dealloc(ptr, layout)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use core::alloc::Layout;
+    use crate::page_provider::TestPageProvider;
+    use crate::allocator::SlabAllocator;
+
+    #[test]
+    fn alloc_dealloc_basic() {
+        let provider = TestPageProvider::new();
+        let mut a = SlabAllocator::new(provider);
+
+        let layout = Layout::from_size_align(32, 8).unwrap();
+
+        let p1 = a.alloc(layout);
+        assert!(!p1.is_null());
+
+        let p2 = a.alloc(layout);
+        assert!(!p2.is_null());
+        assert_ne!(p1, p2);
+
+        a.dealloc(p1, layout);
+        a.dealloc(p2, layout);
+
+        // réallocation doit marcher
+        let p3 = a.alloc(layout);
+        assert!(!p3.is_null());
+    }
+
+    #[test]
+    fn unsupported_size_returns_null() {
+        let provider = TestPageProvider::new();
+        let mut a = SlabAllocator::new(provider);
+
+        let layout = Layout::from_size_align(4096 * 2, 8).unwrap();
+        let p = a.alloc(layout);
+        assert!(p.is_null());
+    }
+
+    #[test]
+    fn alignment_constraint_respected_by_routing() {
+        let provider = TestPageProvider::new();
+        let mut a = SlabAllocator::new(provider);
+
+        let layout = Layout::from_size_align(24, 64).unwrap();
+        let p = a.alloc(layout);
+        assert!(!p.is_null());
+        // on ne peut pas facilement vérifier l'align sans UB, mais on peut au moins tester modulo.
+        assert_eq!((p as usize) % 64, 0);
+
+        a.dealloc(p, layout);
+    }
+}
