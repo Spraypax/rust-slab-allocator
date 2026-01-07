@@ -44,7 +44,6 @@ pub fn dealloc_global(ptr: *mut u8, layout: Layout) {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use core::alloc::Layout;
     use crate::page_provider::TestPageProvider;
     use crate::allocator::SlabAllocator;
@@ -98,7 +97,6 @@ mod tests {
 
 #[cfg(test)]
 mod provider_tests {
-    use super::*;
     use crate::page_provider::PAGE_SIZE;
     use crate::page_provider::PageProvider;
 

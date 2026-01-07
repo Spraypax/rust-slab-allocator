@@ -16,6 +16,148 @@ pub trait PageProvider {
     /// - `ptr` ne doit pas être déjà libéré.
     fn dealloc_page(&mut self, ptr: NonNull<u8>);
 }
+
+/// Une page de 4096 bytes alignée sur 4096.
+#[repr(align(4096))]
+#[derive(Copy, Clone)]
+struct Page([u8; PAGE_SIZE]);
+
+/// PageProvider no_std basé sur un pool statique de N pages.
+///
+/// - Allocation: pop sur une stack d'indices.
+/// - Free: push sur la stack.
+/// - OOM: None.
+pub struct StaticPageProvider<const N: usize> {
+    pool: [Page; N],
+    free_stack: [usize; N],
+    free_len: usize,
+}
+
+impl<const N: usize> StaticPageProvider<N> {
+    /// Crée un provider avec N pages disponibles.
+    pub const fn new() -> Self {
+        let mut free_stack = [0usize; N];
+        let mut i = 0;
+        while i < N {
+            free_stack[i] = i;
+            i += 1;
+        }
+
+        Self {
+            pool: [Page([0u8; PAGE_SIZE]); N],
+            free_stack,
+            free_len: N,
+        }
+    }
+
+    fn page_ptr(&mut self, idx: usize) -> NonNull<u8> {
+        let page = &mut self.pool[idx] as *mut Page as *mut u8;
+        // SAFETY: idx < N garanti par appelant, pool vit aussi longtemps que self.
+        unsafe { NonNull::new_unchecked(page) }
+    }
+
+    fn index_from_ptr(&self, ptr: NonNull<u8>) -> Option<usize> {
+        let base = self.pool.as_ptr() as usize;
+        let p = ptr.as_ptr() as usize;
+
+        let page_size = core::mem::size_of::<Page>();
+        let total = N * page_size;
+
+        if p < base || p >= base + total {
+            return None;
+        }
+
+        let off = p - base;
+        if off % page_size != 0 {
+            return None;
+        }
+
+        Some(off / page_size)
+    }
+}
+
+impl<const N: usize> PageProvider for StaticPageProvider<N> {
+    fn alloc_page(&mut self) -> Option<NonNull<u8>> {
+        if self.free_len == 0 {
+            return None;
+        }
+
+        self.free_len -= 1;
+        let idx = self.free_stack[self.free_len];
+        let page = self.page_ptr(idx);
+
+        unsafe {
+            // # Safety
+            // - `page` pointe vers une région PAGE_SIZE valide dans `pool`.
+            // - On écrit uniquement dans cette page.
+            core::ptr::write_bytes(page.as_ptr(), 0, PAGE_SIZE);
+        }
+
+        Some(page)
+    }
+
+    fn dealloc_page(&mut self, ptr: NonNull<u8>) {
+        let Some(idx) = self.index_from_ptr(ptr) else {
+            debug_assert!(false, "dealloc_page: ptr not from this pool or misaligned");
+            return;
+        };
+
+        if self.free_len >= N {
+            debug_assert!(false, "dealloc_page: free stack overflow (double free?)");
+            return;
+        }
+
+        self.free_stack[self.free_len] = idx;
+        self.free_len += 1;
+    }
+}
+
+#[cfg(test)]
+mod static_provider_tests {
+    use super::*;
+
+    #[test]
+    fn static_provider_alignment_and_oom() {
+        let mut p = StaticPageProvider::<2>::new();
+
+        let a = p.alloc_page().expect("page a");
+        let b = p.alloc_page().expect("page b");
+
+        assert_eq!((a.as_ptr() as usize) % PAGE_SIZE, 0);
+        assert_eq!((b.as_ptr() as usize) % PAGE_SIZE, 0);
+
+        assert!(p.alloc_page().is_none()); // OOM
+
+        p.dealloc_page(a);
+        let c = p.alloc_page().expect("page c");
+        assert_eq!((c.as_ptr() as usize) % PAGE_SIZE, 0);
+    }
+}
+
+#[cfg(test)]
+mod static_provider_tests {
+    use super::*;
+
+    #[test]
+    fn static_provider_alignment_and_oom() {
+        let mut p = StaticPageProvider::<2>::new();
+
+        let a = p.alloc_page().expect("page a");
+        let b = p.alloc_page().expect("page b");
+
+        assert_eq!((a.as_ptr() as usize) % PAGE_SIZE, 0);
+        assert_eq!((b.as_ptr() as usize) % PAGE_SIZE, 0);
+
+        // OOM
+        assert!(p.alloc_page().is_none());
+
+        // free puis realloc
+        p.dealloc_page(a);
+        let c = p.alloc_page().expect("page c");
+        assert_eq!((c.as_ptr() as usize) % PAGE_SIZE, 0);
+    }
+}
+
 #[cfg(test)]
 pub mod test_provider {
     use super::*;
