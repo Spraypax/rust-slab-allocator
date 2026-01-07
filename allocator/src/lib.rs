@@ -93,3 +93,18 @@ mod tests {
         a.dealloc(p, layout);
     }
 }
+
+#[cfg(test)]
+mod provider_tests {
+    use super::*;
+    use crate::page_provider::PAGE_SIZE;
+    use crate::page_provider::PageProvider;
+
+    #[test]
+    fn page_is_4096_aligned() {
+        let mut p = crate::page_provider::TestPageProvider::new();
+        let page = p.alloc_page().expect("alloc page");
+        assert_eq!((page.as_ptr() as usize) % PAGE_SIZE, 0);
+        p.dealloc_page(page);
+    }
+}

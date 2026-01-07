@@ -17,38 +17,46 @@ pub trait PageProvider {
     fn dealloc_page(&mut self, ptr: NonNull<u8>);
 }
 #[cfg(test)]
-pub struct TestPageProvider {
-    pages: std::vec::Vec<NonNull<u8>>,
-}
+pub mod test_provider {
+    use super::*;
+    use std::alloc::{alloc, dealloc, Layout};
+    use std::vec::Vec;
 
-#[cfg(test)]
-impl TestPageProvider {
-    pub fn new() -> Self {
-        Self { pages: std::vec::Vec::new() }
-    }
-}
-
-#[cfg(test)]
-impl PageProvider for TestPageProvider {
-    fn alloc_page(&mut self) -> Option<NonNull<u8>> {
-        // On alloue une page alignée via Vec<u8> puis on leak.
-        let mut v = std::vec![0u8; PAGE_SIZE];
-        let ptr = NonNull::new(v.as_mut_ptr())?;
-        std::mem::forget(v);
-        self.pages.push(ptr);
-        Some(ptr)
+    pub struct TestPageProvider {
+        pages: Vec<NonNull<u8>>,
     }
 
-    fn dealloc_page(&mut self, ptr: NonNull<u8>) {
-        // On retrouve la page et on la drop proprement.
-        let idx = self.pages.iter().position(|&p| p == ptr)
-            .expect("double free / unknown page");
-        self.pages.swap_remove(idx);
+    impl TestPageProvider {
+        pub fn new() -> Self {
+            Self { pages: Vec::new() }
+        }
+    }
 
-        unsafe {
-            // # Safety
-            // ptr provient de alloc_page() ci-dessus, taille PAGE_SIZE.
-            let _ = std::vec::Vec::from_raw_parts(ptr.as_ptr(), PAGE_SIZE, PAGE_SIZE);
+    impl PageProvider for TestPageProvider {
+        fn alloc_page(&mut self) -> Option<NonNull<u8>> {
+            let layout = Layout::from_size_align(PAGE_SIZE, PAGE_SIZE).ok()?;
+
+            // SAFETY: layout valide, alloc renvoie un ptr aligné layout.align()
+            let ptr = unsafe { alloc(layout) };
+            let nn = NonNull::new(ptr)?;
+
+            self.pages.push(nn);
+            Some(nn)
+        }
+
+        fn dealloc_page(&mut self, ptr: NonNull<u8>) {
+            let layout = Layout::from_size_align(PAGE_SIZE, PAGE_SIZE)
+                .expect("layout must be valid");
+
+            let idx = self.pages.iter().position(|&p| p == ptr)
+                .expect("double free / unknown page");
+            self.pages.swap_remove(idx);
+
+            // SAFETY:
+            // - ptr provient de alloc_page() avec le même Layout
+            // - ptr n'a pas déjà été libéré (on le retire de pages)
+            unsafe { dealloc(ptr.as_ptr(), layout) };
         }
     }
 }
+pub use test_provider::TestPageProvider;
