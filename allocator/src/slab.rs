@@ -3,7 +3,7 @@
 //! Un slab est initialisé dans une page fournie par un `PageProvider`.
 //! Le header est stocké au début de la page.
 
-use core::{alloc::Layout, mem, ptr::NonNull};
+use core::{mem, ptr::NonNull};
 
 use crate::freelist::FreeList;
 use crate::page_provider::PAGE_SIZE;
