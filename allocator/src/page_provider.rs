@@ -59,4 +59,5 @@ pub mod test_provider {
         }
     }
 }
-pub use test_provider::TestPageProvider;
+#[cfg(test)]
+pub use self::test_provider::TestPageProvider;
