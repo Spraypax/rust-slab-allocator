@@ -1,6 +1,6 @@
 use core::ptr::NonNull;
 
-use crate::page_provider::PageProvider;
+use crate::page_provider::{PageProvider, PAGE_SIZE};
 
 /// Un cache gère une size class (ex: 64 bytes) + freelist + slabs.
 /// Pour le commit 1 : uniquement les signatures stables.
