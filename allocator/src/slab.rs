@@ -159,3 +159,31 @@ fn align_up(x: usize, a: usize) -> usize {
     debug_assert!(a.is_power_of_two());
     (x + (a - 1)) & !(a - 1)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::page_provider::TestPageProvider;
+    use crate::page_provider::PageProvider;
+
+    #[test]
+    fn slab_init_alloc_free() {
+        let mut prov = TestPageProvider::new();
+        let page = prov.alloc_page().expect("page");
+
+        let mut slab = unsafe { Slab::init(page, 32, 8).expect("slab init") };
+
+        let a = slab.alloc().expect("alloc A");
+        let b = slab.alloc().expect("alloc B");
+        assert_ne!(a, b);
+
+        unsafe {
+            slab.free(a);
+            slab.free(b);
+        }
+
+        assert!(slab.is_empty());
+
+        prov.dealloc_page(page);
+    }
+}
