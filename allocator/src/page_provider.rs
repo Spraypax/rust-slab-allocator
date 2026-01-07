@@ -135,30 +135,6 @@ mod static_provider_tests {
 }
 
 #[cfg(test)]
-mod static_provider_tests {
-    use super::*;
-
-    #[test]
-    fn static_provider_alignment_and_oom() {
-        let mut p = StaticPageProvider::<2>::new();
-
-        let a = p.alloc_page().expect("page a");
-        let b = p.alloc_page().expect("page b");
-
-        assert_eq!((a.as_ptr() as usize) % PAGE_SIZE, 0);
-        assert_eq!((b.as_ptr() as usize) % PAGE_SIZE, 0);
-
-        // OOM
-        assert!(p.alloc_page().is_none());
-
-        // free puis realloc
-        p.dealloc_page(a);
-        let c = p.alloc_page().expect("page c");
-        assert_eq!((c.as_ptr() as usize) % PAGE_SIZE, 0);
-    }
-}
-
-#[cfg(test)]
 pub mod test_provider {
     use super::*;
     use std::alloc::{alloc, dealloc, Layout};
