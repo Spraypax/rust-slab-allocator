@@ -61,7 +61,7 @@ impl Cache {
 
         // Slow path: créer un nouveau slab.
         let page = provider.alloc_page()?;
-        let slab = unsafe { init_slab(page, self.obj_size)? };
+        let mut slab = unsafe { init_slab(page, self.obj_size)? };
         unsafe {
             // # Safety
             // slab est un header nouvellement initialisé ; insertion en tête.
@@ -89,11 +89,8 @@ impl Cache {
         unsafe {
             // # Safety
             // slab_from_obj calcule la page de ptr, qui provient d'une page de cette cache.
-            let hdr = slab.as_ptr();
-
-            // On doit muter le header => cast mut.
-            let hdr = hdr.cast_mut();
-            let hdr_ref = &mut *hdr;
+            let hdr = slab.as_ptr() as *mut SlabHeader;
+	    let hdr_ref = &mut *hdr;
 
             freelist_push(ptr, hdr_ref.freelist);
             hdr_ref.freelist = Some(ptr);

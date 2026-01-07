@@ -1,5 +1,8 @@
 #![no_std]
 
+#[cfg(test)]
+extern crate std;
+
 // Permet d'utiliser `core::alloc::Layout` etc.
 use core::alloc::Layout;
 

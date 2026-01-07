@@ -59,3 +59,13 @@ impl<P: PageProvider> SlabAllocator<P> {
         self.caches[i].dealloc(&mut self.provider, nn);
     }
 }
+
+pub fn alloc(_layout: Layout) -> *mut u8 {
+    core::ptr::null_mut()
+}
+
+/// API globale minimale (router).
+/// Pour l'instant: stub (no-op).
+pub fn dealloc(_ptr: *mut u8, _layout: Layout) {
+    // no-op
+}
