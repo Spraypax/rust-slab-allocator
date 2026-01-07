@@ -1,51 +1,61 @@
 use core::alloc::Layout;
-use core::ptr::{self, NonNull};
+use core::ptr::NonNull;
 
-use crate::size_class_index;
-use crate::cache::{Cache, DummyCache};
+use crate::cache::Cache;
 use crate::page_provider::PageProvider;
 
-pub struct DummyProvider;
+const SIZE_CLASSES: [usize; 9] = [8, 16, 32, 64, 128, 256, 512, 1024, 2048];
 
-impl PageProvider for DummyProvider {
-    fn alloc_page(&mut self) -> Option<NonNull<u8>> {
-        None
-    }
-    fn dealloc_page(&mut self, _ptr: NonNull<u8>) {}
+pub struct SlabAllocator<P: PageProvider> {
+    provider: P,
+    caches: [Cache; 9],
 }
 
-pub fn alloc(layout: Layout) -> *mut u8 {
-    let size = layout.size();
-    let align = layout.align();
-
-    if align > 2048 {
-        return ptr::null_mut();
-    }
-    if size_class_index(size).is_none() {
-        return ptr::null_mut();
-    }
-
-    let mut provider = DummyProvider;
-    let mut cache = DummyCache;
-
-    match cache.alloc(&mut provider) {
-        Some(p) => p.as_ptr(),
-        None => ptr::null_mut(),
-    }
-}
-
-pub fn dealloc(ptr: *mut u8, layout: Layout) {
-    if ptr.is_null() {
-        return;
-    }
-    let size = layout.size();
-    if size_class_index(size).is_none() {
-        return;
+impl<P: PageProvider> SlabAllocator<P> {
+    pub fn new(provider: P) -> Self {
+        Self {
+            provider,
+            caches: [
+                Cache::new(8),
+                Cache::new(16),
+                Cache::new(32),
+                Cache::new(64),
+                Cache::new(128),
+                Cache::new(256),
+                Cache::new(512),
+                Cache::new(1024),
+                Cache::new(2048),
+            ],
+        }
     }
 
-    let mut cache = DummyCache;
+    fn cache_index(layout: Layout) -> Option<usize> {
+        let size = layout.size();
+        let align = layout.align();
 
-    unsafe {
-        cache.dealloc(NonNull::new_unchecked(ptr));
+        // on exige que la size class >= size et >= align
+        SIZE_CLASSES.iter().position(|&c| c >= size && c >= align)
+    }
+
+    pub fn alloc(&mut self, layout: Layout) -> *mut u8 {
+        let Some(i) = Self::cache_index(layout) else {
+            return core::ptr::null_mut();
+        };
+
+        match self.caches[i].alloc(&mut self.provider) {
+            Some(p) => p.as_ptr(),
+            None => core::ptr::null_mut(),
+        }
+    }
+
+    pub fn dealloc(&mut self, ptr: *mut u8, layout: Layout) {
+        let Some(nn) = NonNull::new(ptr) else { return; };
+
+        let Some(i) = Self::cache_index(layout) else {
+            // taille non supportée -> ignore (ou panic en debug)
+            return;
+        };
+
+        self.caches[i].dealloc(&mut self.provider, nn);
     }
 }
