@@ -9,6 +9,7 @@ use core::alloc::Layout;
 pub mod page_provider;
 pub mod cache;
 pub mod allocator;
+pub mod freelist;
 
 // Re-export des interfaces publiques (pratique pour les tests et l'usage)
 pub use page_provider::PageProvider;
