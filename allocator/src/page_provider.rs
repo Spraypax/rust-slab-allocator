@@ -20,6 +20,7 @@ pub trait PageProvider {
 /// Une page de 4096 bytes alignée sur 4096.
 #[repr(align(4096))]
 #[derive(Copy, Clone)]
+#[allow(dead_code)]
 struct Page([u8; PAGE_SIZE]);
 
 /// PageProvider no_std basé sur un pool statique de N pages.
