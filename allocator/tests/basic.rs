@@ -3,9 +3,11 @@ use core::alloc::Layout;
 use allocator::page_provider::StaticPageProvider;
 use allocator::SlabAllocator;
 
+const N_PAGES: usize = 64;
+
 #[test]
 fn alloc_free_reuse_same_sizeclass() {
-    let provider = StaticPageProvider::new();
+    let provider = StaticPageProvider::<N_PAGES>::new();
     let mut a = SlabAllocator::new(provider);
 
     let layout = Layout::from_size_align(16, 8).unwrap();
@@ -18,13 +20,12 @@ fn alloc_free_reuse_same_sizeclass() {
     let p2 = a.alloc(layout);
     assert!(!p2.is_null());
 
-    // freelist LIFO => souvent le même ptr
     assert_eq!(p2, p1);
 }
 
 #[test]
 fn unsupported_size_returns_null() {
-    let provider = StaticPageProvider::new();
+    let provider = StaticPageProvider::<N_PAGES>::new();
     let mut a = SlabAllocator::new(provider);
 
     let layout = Layout::from_size_align(4096, 8).unwrap();
@@ -34,10 +35,9 @@ fn unsupported_size_returns_null() {
 
 #[test]
 fn alignment_too_large_returns_null() {
-    let provider = StaticPageProvider::new();
+    let provider = StaticPageProvider::<N_PAGES>::new();
     let mut a = SlabAllocator::new(provider);
 
-    // size 32 mais align 64 -> refusé (align > obj_size)
     let layout = Layout::from_size_align(32, 64).unwrap();
     let p = a.alloc(layout);
     assert!(p.is_null());
@@ -45,7 +45,7 @@ fn alignment_too_large_returns_null() {
 
 #[test]
 fn alloc_multiple_then_free_all() {
-    let provider = StaticPageProvider::new();
+    let provider = StaticPageProvider::<N_PAGES>::new();
     let mut a = SlabAllocator::new(provider);
 
     let layout = Layout::from_size_align(64, 8).unwrap();

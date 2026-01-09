@@ -32,8 +32,13 @@ impl Cache {
 
         let page = provider.alloc_page()?;
 
-        // IMPORTANT: Slab::init retourne Option<Slab> chez vous => on unwrap avec `?`
-        let mut s = Slab::init(page, self.obj_size, self.align)?;
+        // # Safety
+        // - `page` provient de `provider.alloc_page()` => page valide et alignée (contrat PageProvider).
+        // - `obj_size` et `align` sont les paramètres du cache (size class fixe), utilisés de manière cohérente.
+        // - Le slab découpe la page en chunks et stocke une freelist intrusive: la page doit être writable et
+        //   rester vivante tant que le Slab est utilisé.
+        let mut s = unsafe { Slab::init(page, self.obj_size, self.align)? };
+
 
         let p = s.alloc()?;
         self.slab = Some(s);
