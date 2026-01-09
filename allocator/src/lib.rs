@@ -30,8 +30,6 @@ pub fn size_class_index(size: usize) -> Option<usize> {
 
 /// API globale minimale (router).
 /// Voir `allocator::alloc` / `allocator::dealloc`.
-///
-/// Note: l'impl concrète arrivera ensuite.
 #[inline]
 pub fn alloc_global(layout: Layout) -> *mut u8 {
     alloc(layout)
@@ -62,8 +60,8 @@ mod tests {
         assert!(!p2.is_null());
         assert_ne!(p1, p2);
 
-        a.dealloc(p1, layout);
-        a.dealloc(p2, layout);
+        unsafe { a.dealloc(p1, layout) };
+        unsafe { a.dealloc(p2, layout) };
 
         // réallocation doit marcher
         let p3 = a.alloc(layout);
@@ -88,10 +86,9 @@ mod tests {
         let layout = Layout::from_size_align(24, 64).unwrap();
         let p = a.alloc(layout);
         assert!(!p.is_null());
-        // on ne peut pas facilement vérifier l'align sans UB, mais on peut au moins tester modulo.
         assert_eq!((p as usize) % 64, 0);
 
-        a.dealloc(p, layout);
+        unsafe { a.dealloc(p, layout) };
     }
 }
 

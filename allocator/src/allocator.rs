@@ -4,7 +4,7 @@ use core::ptr::NonNull;
 use crate::cache::Cache;
 use crate::page_provider::PageProvider;
 
-const SIZE_CLASSES: [usize; 9] = [8, 16, 32, 64, 128, 256, 512, 1024, 2048];
+pub const SIZE_CLASSES: [usize; 9] = [8, 16, 32, 64, 128, 256, 512, 1024, 2048];
 
 pub struct SlabAllocator<P: PageProvider> {
     provider: P,
@@ -13,59 +13,86 @@ pub struct SlabAllocator<P: PageProvider> {
 
 impl<P: PageProvider> SlabAllocator<P> {
     pub fn new(provider: P) -> Self {
-        Self {
-            provider,
-            caches: [
-                Cache::new(8),
-                Cache::new(16),
-                Cache::new(32),
-                Cache::new(64),
-                Cache::new(128),
-                Cache::new(256),
-                Cache::new(512),
-                Cache::new(1024),
-                Cache::new(2048),
-            ],
-        }
+        let caches = [
+            Cache::new(8, 8),
+            Cache::new(16, 16),
+            Cache::new(32, 32),
+            Cache::new(64, 64),
+            Cache::new(128, 128),
+            Cache::new(256, 256),
+            Cache::new(512, 512),
+            Cache::new(1024, 1024),
+            Cache::new(2048, 2048),
+        ];
+
+        Self { provider, caches }
     }
 
-    fn cache_index(layout: Layout) -> Option<usize> {
-        let size = layout.size();
+    #[inline]
+    fn class_index(size: usize) -> Option<usize> {
+        SIZE_CLASSES.iter().position(|&c| c >= size)
+    }
+
+    #[inline]
+    fn pick_index(layout: Layout) -> Option<usize> {
+        let size = layout.size().max(1);
         let align = layout.align();
 
-        // on exige que la size class >= size et >= align
-        SIZE_CLASSES.iter().position(|&c| c >= size && c >= align)
+        let idx = Self::class_index(size)?;
+
+        // règle minimale: align <= sizeclass
+        if align > SIZE_CLASSES[idx] {
+            return None;
+        }
+
+        Some(idx)
     }
 
     pub fn alloc(&mut self, layout: Layout) -> *mut u8 {
-        let Some(i) = Self::cache_index(layout) else {
+        let Some(idx) = Self::pick_index(layout) else {
             return core::ptr::null_mut();
         };
 
-        match self.caches[i].alloc(&mut self.provider) {
+        // Emprunts séparés => plus de E0499
+        let provider = &mut self.provider;
+        let cache = &mut self.caches[idx];
+
+        match cache.alloc(provider) {
             Some(p) => p.as_ptr(),
             None => core::ptr::null_mut(),
         }
     }
 
-    pub fn dealloc(&mut self, ptr: *mut u8, layout: Layout) {
-        let Some(nn) = NonNull::new(ptr) else { return; };
+    /// # Safety
+    /// - `ptr` doit provenir d’un `alloc(layout)` de CET allocator.
+    /// - pas de double-free.
+    pub unsafe fn dealloc(&mut self, ptr: *mut u8, layout: Layout) {
+        if ptr.is_null() {
+            return;
+        }
 
-        let Some(i) = Self::cache_index(layout) else {
-            // taille non supportée -> ignore (ou panic en debug)
+        let Some(idx) = Self::pick_index(layout) else {
+            debug_assert!(false, "dealloc: unsupported layout");
             return;
         };
 
-        self.caches[i].dealloc(&mut self.provider, nn);
+        let cache = &mut self.caches[idx];
+        let nn = unsafe { NonNull::new_unchecked(ptr) };
+        unsafe { cache.dealloc(nn) };
+    }
+
+    pub fn provider_mut(&mut self) -> &mut P {
+        &mut self.provider
     }
 }
 
+/// (Optionnel) si vous aviez déjà une API globale alloc/dealloc.
+/// Si votre ancien `allocator.rs` exposait déjà `pub fn alloc(...)` et `pub fn dealloc(...)`,
+/// gardez ces wrappers avec votre global interne.
+/// Sinon supprime cette partie.
 pub fn alloc(_layout: Layout) -> *mut u8 {
     core::ptr::null_mut()
 }
 
-/// API globale minimale (router).
-/// Pour l'instant: stub (no-op).
 pub fn dealloc(_ptr: *mut u8, _layout: Layout) {
-    // no-op
 }
