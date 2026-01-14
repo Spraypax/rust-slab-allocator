@@ -318,6 +318,38 @@ mais augmentent fortement la complexité des exploits :
 Notre projet implémente un allocateur slab minimal inspiré de SLUB,
 dans un contexte volontairement simplifié.
 
+## Mapping direct SLUB → notre code (parallèle concret)
+
+Cette section fait le lien explicite entre les concepts SLUB et notre implémentation Rust no_std.
+
+- **Fourniture de pages (4 KiB)** : `src/page_provider.rs`  
+  - `PageProvider::{alloc_page, dealloc_page}`  
+  - backend “pool statique” pour simuler un fournisseur de pages, avec OOM (`None`).
+
+- **Freelist intrusive** : `src/freelist.rs`  
+  - `FreeNode` stocké dans les objets libres  
+  - `FreeList::{push, pop}` (LIFO)
+
+- **Slab (1 page = 1 slab)** : `src/slab.rs`  
+  - `Slab::init(page, obj_size, align)` : formatage de la page en objets alignés  
+  - `Slab::{alloc, free, contains}`
+
+- **Cache par size class** : `src/cache.rs`  
+  - `Cache` gère une **liste intrusive de slabs** (équivalent simplifié d’une partial list)  
+  - fast path : trouver un slab avec freelist non vide  
+  - slow path : demander une nouvelle page au provider et créer un nouveau slab
+  
+### Note sur la gestion des slabs (différence vs SLUB)
+
+SLUB maintient des structures plus riches (ex: listes partial/full, per-CPU caches, heuristiques) afin d’optimiser les allocations et limiter la contention.
+Dans notre version minimaliste, chaque cache conserve une **liste intrusive de slabs** (une page = un slab) et parcourt cette liste pour trouver un slab avec un objet libre.  
+Nous ne distinguons pas explicitement des états `partial/full/free` : c’est une simplification volontaire,suffisante pour illustrer le mécanisme de freelist et les invariants d’ownership.
+
+- **Router (Layout → cache)** : `src/allocator.rs`  
+  - sélection de la size class (8..2048) selon `Layout`  
+  - rejet des tailles/alignements non supportés  
+  - délégation à `Cache::alloc` / `Cache::dealloc`
+
 ### 8.1 Éléments implémentés
 
 Notre allocateur reprend les concepts fondamentaux de SLUB :
