@@ -77,8 +77,12 @@ impl<P: PageProvider> SlabAllocator<P> {
         };
 
         let cache = &mut self.caches[idx];
-        let nn = unsafe { NonNull::new_unchecked(ptr) };
-        unsafe { cache.dealloc(nn) };
+        let nn = NonNull::new(ptr).expect("ptr checked non-null above");
+	// SAFETY:
+	// - ptr provient d’un alloc(layout) de CET allocator (précondition de dealloc)
+	// - layout route vers ce cache (pick_index identique)
+	// - pas de double free (précondition)
+	unsafe { cache.dealloc(nn) };
     }
 
     pub fn provider_mut(&mut self) -> &mut P {
