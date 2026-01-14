@@ -46,22 +46,35 @@ Voir le fichier `Authors.md`
 
 ---
 
+## 📜 Licence
+
+Ce projet est distribué sous licence MIT.  
+Voir le fichier `LICENSE`
+
+---
+
+## 🙏 Crédits
+
+Certaines idées d’architecture sont inspirées de la documentation du kernel Linux
+et de ressources publiques sur les allocateurs slab.
+
+---
+
 ## 📂 Structure du dépôt
 
 allocator/
-├── Cargo.toml
-├── Cargo.lock
-├── README.md
+├── Cargo.toml        # Configuration du crate
+├── Cargo.lock        # Verrouillage des dépendances
 ├── src/
-│ ├── lib.rs # Entrée principale de la crate
-│ ├── allocator.rs # Router global alloc/dealloc
-│ ├── cache.rs # Cache par classe de taille (multi-slab)
-│ ├── slab.rs # Gestion d’un slab (1 page = N objets)
-│ ├── freelist.rs # Freelist intrusive
-│ └── page_provider.rs # Fournisseur de pages (4096 bytes)
+│   ├── lib.rs        # Entrée principale de la crate
+│   ├── allocator.rs # Router global alloc/dealloc
+│   ├── cache.rs     # Cache par classe de taille (multi-slab)
+│   ├── slab.rs      # Gestion d’un slab (1 page = N objets)
+│   ├── freelist.rs  # Freelist intrusive
+│   └── page_provider.rs # Fournisseur de pages (4096 bytes)
 ├── tests/
-│ └── basic.rs # Tests d’intégration
-└── slub.md # Write-up technique SLUB
+│   └── basic.rs     # Tests d’intégration
+└── slub.md           # Write-up technique SLUB
 
 ---
 
