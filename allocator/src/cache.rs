@@ -27,7 +27,10 @@ impl Cache {
         // Fast path: chercher un slab avec une place libre
         let mut cur = self.head;
         while let Some(hdr) = cur {
-            // SAFETY: hdr provient d'un slab initialisé, stocké dans une page valide.
+            // SAFETY:
+	    // - `hdr` provient d’un SlabHeader initialisé par Slab::init()
+	    // - header vit au début d’une page slab encore vivante
+	    // - liste intrusive ne contient que des headers valides
             let mut slab = unsafe { Slab::from_hdr(hdr) };
             if let Some(p) = slab.alloc() {
                 return Some(p);
@@ -61,7 +64,10 @@ impl Cache {
         let mut cur = self.head;
 
         while let Some(hdr) = cur {
-            // SAFETY: hdr est un header slab valide.
+            // SAFETY:
+	    // - `hdr` provient d’un SlabHeader initialisé par Slab::init()
+	    // - header vit au début d’une page slab encore vivante
+	    // - liste intrusive ne contient que des headers valides
             let mut slab = unsafe { Slab::from_hdr(hdr) };
 
             if slab.contains(ptr) {

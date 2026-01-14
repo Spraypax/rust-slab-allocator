@@ -93,6 +93,10 @@ impl Slab {
         );
 
         let mut slab = Slab {
+            // SAFETY:
+	    // - hdr_ptr pointe dans la page `page` fournie (PAGE_SIZE bytes)
+	    // - hdr_ptr est non-null (page non-null)
+	    // - la page est exclusive à ce slab pendant sa durée de vie
             hdr: NonNull::new_unchecked(hdr_ptr),
         };
 
@@ -133,10 +137,12 @@ impl Slab {
     }
 
     pub fn capacity(&self) -> u16 {
+    	// SAFETY: self.hdr pointe vers un SlabHeader écrit par Slab::init dans une page vivante
         unsafe { self.hdr.as_ref().capacity }
     }
 
     pub fn inuse(&self) -> u16 {
+    	// SAFETY: self.hdr pointe vers un SlabHeader écrit par Slab::init dans une page vivante
         unsafe { self.hdr.as_ref().inuse }
     }
 
