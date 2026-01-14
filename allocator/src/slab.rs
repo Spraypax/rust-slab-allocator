@@ -12,6 +12,8 @@ use crate::page_provider::PAGE_SIZE;
 /// Ce header vit DANS la page, pas d'allocation externe.
 #[repr(C)]
 pub struct SlabHeader {
+    /// Lien vers le prochain slab du même cache (liste intrusive).
+    next: Option<NonNull<SlabHeader>>,
     /// Freelist intrusive des objets libres dans cette page.
     freelist: FreeList,
     /// Nombre d'objets actuellement alloués.
@@ -81,6 +83,7 @@ impl Slab {
         core::ptr::write(
             hdr_ptr,
             SlabHeader {
+            	next: None,
                 freelist: FreeList::new(),
                 inuse: 0,
                 capacity: capacity.min(u16::MAX as usize) as u16,
@@ -151,6 +154,26 @@ impl Slab {
     /// Base de page (début du slab).
     pub fn page_base(&self) -> *mut u8 {
         self.hdr.as_ptr() as *mut u8
+    }
+    
+    /// # Safety
+    /// - `hdr` doit pointer vers un SlabHeader valide au début d'une page slab.
+    pub unsafe fn from_hdr(hdr: NonNull<SlabHeader>) -> Self {
+        Self { hdr }
+    }
+
+    pub fn header_ptr(&self) -> NonNull<SlabHeader> {
+        self.hdr
+    }
+
+    pub fn next_hdr(&self) -> Option<NonNull<SlabHeader>> {
+        unsafe { self.hdr.as_ref().next }
+    }
+
+    /// # Safety
+    /// - `self` doit être un slab valide (header vivant dans la page).
+    pub unsafe fn set_next_hdr(&mut self, next: Option<NonNull<SlabHeader>>) {
+        self.hdr.as_mut().next = next;
     }
 }
 
