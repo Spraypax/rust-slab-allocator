@@ -1,12 +1,12 @@
 use core::ptr::NonNull;
 
 use crate::page_provider::PageProvider;
-use crate::slab::Slab;
+use crate::slab::{Slab, SlabHeader};
 
 pub struct Cache {
     obj_size: usize,
     align: usize,
-    slab: Option<Slab>,
+    head: Option<NonNull<SlabHeader>>,
 }
 
 impl Cache {
@@ -14,7 +14,7 @@ impl Cache {
         Self {
             obj_size,
             align,
-            slab: None,
+            head: None,
         }
     }
 
@@ -24,35 +24,57 @@ impl Cache {
     }
 
     pub fn alloc<P: PageProvider>(&mut self, provider: &mut P) -> Option<NonNull<u8>> {
-        if let Some(s) = self.slab.as_mut() {
-            if let Some(p) = s.alloc() {
+        // Fast path: chercher un slab avec une place libre
+        let mut cur = self.head;
+        while let Some(hdr) = cur {
+            // SAFETY: hdr provient d'un slab initialisé, stocké dans une page valide.
+            let mut slab = unsafe { Slab::from_hdr(hdr) };
+            if let Some(p) = slab.alloc() {
                 return Some(p);
             }
+            cur = slab.next_hdr();
         }
 
+        // Slow path: nouveau slab
         let page = provider.alloc_page()?;
 
-        // # Safety
-        // - `page` provient de `provider.alloc_page()` => page valide et alignée (contrat PageProvider).
-        // - `obj_size` et `align` sont les paramètres du cache (size class fixe), utilisés de manière cohérente.
-        // - Le slab découpe la page en chunks et stocke une freelist intrusive: la page doit être writable et
-        //   rester vivante tant que le Slab est utilisé.
-        let mut s = unsafe { Slab::init(page, self.obj_size, self.align)? };
+        // SAFETY:
+        // - `page` provient du provider => page valide, alignée, writable.
+        // - obj_size/align cohérents pour ce cache.
+        let mut new_slab = unsafe { Slab::init(page, self.obj_size, self.align)? };
 
+        // Insérer en tête de liste
+        unsafe {
+            // # Safety
+            // `new_slab` est valide et son header est dans la page.
+            new_slab.set_next_hdr(self.head);
+        }
+        self.head = Some(new_slab.header_ptr());
 
-        let p = s.alloc()?;
-        self.slab = Some(s);
-        Some(p)
+        new_slab.alloc()
     }
 
     /// # Safety
     /// - `ptr` doit provenir d’un `alloc()` de CE cache (même size-class).
     /// - pas de double-free.
     pub unsafe fn dealloc(&mut self, ptr: NonNull<u8>) {
-        if let Some(s) = self.slab.as_mut() {
-            s.free(ptr);
-        } else {
-            debug_assert!(false, "dealloc on empty cache");
+        let mut cur = self.head;
+
+        while let Some(hdr) = cur {
+            // SAFETY: hdr est un header slab valide.
+            let mut slab = unsafe { Slab::from_hdr(hdr) };
+
+            if slab.contains(ptr) {
+                // SAFETY:
+                // - `ptr` appartient bien à ce slab (contains).
+                // - pas de double free (précondition).
+                slab.free(ptr);
+                return;
+            }
+
+            cur = slab.next_hdr();
         }
+
+        debug_assert!(false, "dealloc: ptr not found in cache slabs");
     }
 }
