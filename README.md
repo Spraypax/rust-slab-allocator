@@ -62,19 +62,26 @@ et de ressources publiques sur les allocateurs slab.
 
 ## 📂 Structure du dépôt
 
-allocator/
-├── Cargo.toml        # Configuration du crate
-├── Cargo.lock        # Verrouillage des dépendances
-├── src/
-│   ├── lib.rs        # Entrée principale de la crate
-│   ├── allocator.rs # Router global alloc/dealloc
-│   ├── cache.rs     # Cache par classe de taille (multi-slab)
-│   ├── slab.rs      # Gestion d’un slab (1 page = N objets)
-│   ├── freelist.rs  # Freelist intrusive
-│   └── page_provider.rs # Fournisseur de pages (4096 bytes)
-├── tests/
-│   └── basic.rs     # Tests d’intégration
-└── slub.md           # Write-up technique SLUB
+```text
+rust-slab-allocator/
+├── allocator/
+│   ├── Cargo.toml        # Configuration du crate allocator
+│   ├── Cargo.lock        # Verrouillage des dépendances
+│   ├── src/
+│   │   ├── lib.rs        # Entrée principale de la crate
+│   │   ├── allocator.rs # Router global alloc/dealloc
+│   │   ├── cache.rs     # Cache par classe de taille (multi-slab)
+│   │   ├── slab.rs      # Gestion d’un slab (1 page = N objets)
+│   │   ├── freelist.rs  # Freelist intrusive
+│   │   └── page_provider.rs # Fournisseur de pages (4096 bytes)
+│   └── tests/
+│       └── basic.rs     # Tests d’intégration
+├── Authors.md            # Auteurs du projet (format exigé)
+├── LICENSE               # Licence MIT
+├── README.md             # Documentation principale
+└── writeup/
+    └── slub.md           # Write-up technique SLUB
+```
 
 ---
 
