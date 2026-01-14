@@ -65,3 +65,41 @@ fn alloc_multiple_then_free_all() {
     let p = a.alloc(layout);
     assert!(!p.is_null());
 }
+
+#[test]
+fn dealloc_goes_to_correct_slab() {
+    let provider = StaticPageProvider::<N_PAGES>::new();
+    let mut a = SlabAllocator::new(provider);
+
+    let layout = Layout::from_size_align(8, 8).unwrap();
+
+    // 1) Premier alloc => slab 1
+    let p0 = a.alloc(layout);
+    assert!(!p0.is_null());
+    let base0 = (p0 as usize) & !(4096 - 1);
+
+    // 2) Allouer jusqu'à obtenir un ptr d'une autre page => slab 2
+    let mut base1 = base0;
+    let mut guard = 0usize;
+    while base1 == base0 {
+        let p = a.alloc(layout);
+        assert!(!p.is_null());
+        base1 = (p as usize) & !(4096 - 1);
+        guard += 1;
+        assert!(guard < 10000, "failed to reach second slab");
+    }
+
+    // 3) Free un ptr du slab 1
+    unsafe { a.dealloc(p0, layout) };
+
+    // 4) Prochaine alloc doit venir du slab HEAD (slab 2), pas retourner p0
+    // Si bug ancien: p0 est poussé dans la freelist du slab 2 et ressort immédiatement => base0.
+    let p_next = a.alloc(layout);
+    assert!(!p_next.is_null());
+    let base_next = (p_next as usize) & !(4096 - 1);
+
+    assert_eq!(
+        base_next, base1,
+        "allocation returned ptr from wrong slab (likely freelist corruption)"
+    );
+}
