@@ -3,9 +3,6 @@
 #[cfg(test)]
 extern crate std;
 
-// Permet d'utiliser `core::alloc::Layout` etc.
-use core::alloc::Layout;
-
 pub mod page_provider;
 pub mod cache;
 pub mod allocator;
