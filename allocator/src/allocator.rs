@@ -89,14 +89,3 @@ impl<P: PageProvider> SlabAllocator<P> {
         &mut self.provider
     }
 }
-
-/// (Optionnel) si vous aviez déjà une API globale alloc/dealloc.
-/// Si votre ancien `allocator.rs` exposait déjà `pub fn alloc(...)` et `pub fn dealloc(...)`,
-/// gardez ces wrappers avec votre global interne.
-/// Sinon supprime cette partie.
-pub fn alloc(_layout: Layout) -> *mut u8 {
-    core::ptr::null_mut()
-}
-
-pub fn dealloc(_ptr: *mut u8, _layout: Layout) {
-}
