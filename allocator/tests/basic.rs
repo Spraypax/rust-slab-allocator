@@ -103,3 +103,24 @@ fn dealloc_goes_to_correct_slab() {
         "allocation returned ptr from wrong slab (likely freelist corruption)"
     );
 }
+
+#[test]
+fn allocator_oom_returns_null() {
+    // Provider minuscule: 1 seule page disponible
+    let provider = StaticPageProvider::<1>::new();
+    let mut a = SlabAllocator::new(provider);
+
+    // 2048 => 2 objets max par page de 4096 (donc avec 1 page: 2 alloc OK, puis OOM)
+    let layout = Layout::from_size_align(2048, 8).unwrap();
+
+    let p1 = a.alloc(layout);
+    assert!(!p1.is_null());
+
+    let p2 = a.alloc(layout);
+    assert!(!p2.is_null());
+
+    // 3e alloc => besoin d'une nouvelle page => OOM => null
+    let p3 = a.alloc(layout);
+    assert!(p3.is_null());
+
+}
