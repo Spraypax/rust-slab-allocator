@@ -28,18 +28,6 @@ pub fn size_class_index(size: usize) -> Option<usize> {
     SIZE_CLASSES.iter().position(|&c| size <= c)
 }
 
-/// API globale minimale (router).
-/// Voir `allocator::alloc` / `allocator::dealloc`.
-#[inline]
-pub fn alloc_global(layout: Layout) -> *mut u8 {
-    alloc(layout)
-}
-
-#[inline]
-pub fn dealloc_global(ptr: *mut u8, layout: Layout) {
-    dealloc(ptr, layout)
-}
-
 #[cfg(test)]
 mod tests {
     use core::alloc::Layout;
