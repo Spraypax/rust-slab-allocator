@@ -1,4 +1,5 @@
 use core::ptr::NonNull;
+use core::cell::UnsafeCell;
 
 /// Backend qui fournit des pages de 4096 bytes.
 pub const PAGE_SIZE: usize = 4096;
@@ -29,7 +30,7 @@ struct Page([u8; PAGE_SIZE]);
 /// - Free: push sur la stack.
 /// - OOM: None.
 pub struct StaticPageProvider<const N: usize> {
-    pool: [Page; N],
+    pool: UnsafeCell<[Page; N]>,
     free_stack: [usize; N],
     free_len: usize,
 }
@@ -45,20 +46,26 @@ impl<const N: usize> StaticPageProvider<N> {
         }
 
         Self {
-            pool: [Page([0u8; PAGE_SIZE]); N],
+            pool: UnsafeCell::new([Page([0u8; PAGE_SIZE]); N]),
             free_stack,
             free_len: N,
         }
     }
 
     fn page_ptr(&mut self, idx: usize) -> NonNull<u8> {
-        let page = &mut self.pool[idx] as *mut Page as *mut u8;
-        // SAFETY: idx < N garanti par appelant, pool vit aussi longtemps que self.
-        unsafe { NonNull::new_unchecked(page) }
-    }
+    // SAFETY:
+    // - `self.pool.get()` pointe vers le tableau [Page; N] vivant aussi longtemps que `self`.
+    // - `idx < N` est garanti par l'appelant.
+    // - On ne crée pas de référence `&mut` sur la page ici : on ne fait que fabriquer un raw pointer stable.
+    let base: *mut Page = unsafe { (*self.pool.get()).as_mut_ptr() };
+    let page: *mut u8 = unsafe { base.add(idx) } as *mut u8;
+
+    // SAFETY: `page` est non-null et pointe dans le pool.
+    unsafe { NonNull::new_unchecked(page) }
+}
 
     fn index_from_ptr(&self, ptr: NonNull<u8>) -> Option<usize> {
-        let base = self.pool.as_ptr() as usize;
+        let base = self.pool.get() as usize;
         let p = ptr.as_ptr() as usize;
 
         let page_size = core::mem::size_of::<Page>();
