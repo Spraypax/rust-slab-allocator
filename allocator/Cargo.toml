@@ -10,3 +10,4 @@ path = "src/lib.rs"
 default = []
 # feature optionnelle
 testing = []
+test-provider = []

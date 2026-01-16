@@ -1,6 +1,7 @@
 use core::alloc::Layout;
 
 use allocator::SlabAllocator;
+use allocator::PageProvider;
 
 #[cfg(not(miri))]
 use allocator::page_provider::StaticPageProvider;

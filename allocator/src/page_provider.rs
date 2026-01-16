@@ -139,7 +139,7 @@ mod static_provider_tests {
     }
 }
 
-#[cfg(all(test, not(miri)))]
+#[cfg(any(test, feature = "test-provider"))]
 pub mod test_provider {
     use super::*;
     use std::alloc::{alloc, dealloc, Layout};
@@ -191,5 +191,5 @@ pub mod test_provider {
 	    }
 	}
 }
-#[cfg(test)]
+#[cfg(any(test, feature = "test-provider"))]
 pub use self::test_provider::TestPageProvider;
