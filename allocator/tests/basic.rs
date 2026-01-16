@@ -11,6 +11,7 @@ use allocator::page_provider::StaticPageProvider;
 #[cfg(miri)]
 use allocator::page_provider::TestPageProvider;
 
+#[cfg(not(miri))]
 const N_PAGES: usize = 64;
 
 #[test]

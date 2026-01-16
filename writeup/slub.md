@@ -386,6 +386,65 @@ Ces absences sont assumées et documentées.
 Ce parallèle permet de relier directement les concepts théoriques
 à une implémentation concrète.
 
+### 8.4 Bonus — Validation mémoire avec Miri
+
+Dans le cadre du bonus, notre implémentation de l’allocateur slab a été
+validée à l’aide de l’outil Miri.
+
+Miri est un interpréteur du langage Rust qui exécute le code en appliquant
+un modèle mémoire strict, basé notamment sur Stacked Borrows.
+Contrairement aux tests classiques, Miri permet de détecter dynamiquement
+des comportements indéfinis (Undefined Behavior) liés à l’utilisation
+de pointeurs bruts et de blocs unsafe.
+
+Ce point est particulièrement pertinent dans le contexte d’un allocateur,
+où l’implémentation repose volontairement sur :
+- des pointeurs bruts (*mut u8),
+- une freelist intrusive stockée dans la mémoire des objets libres,
+- des manipulations manuelles d’ownership et d’aliasing,
+- plusieurs invariants qui ne peuvent pas être exprimés directement par le type system.
+
+#### Objectifs de la validation
+
+L’objectif de l’exécution sous Miri était de vérifier l’absence de :
+- violations d’aliasing entre références mutables,
+- accès mémoire hors limites,
+- use-after-free,
+- double free,
+- corruption de la freelist intrusive,
+- fuites mémoire lors des cycles allocation / libération.
+
+Autrement dit, il s’agissait de vérifier que le code unsafe respecte bien
+les invariants implicites attendus par le modèle mémoire de Rust.
+
+#### Adaptation de l’implémentation pour Miri
+
+Afin de pouvoir exécuter les tests sous Miri tout en conservant un allocateur
+no_std, un backend de fourniture de pages spécifique aux tests a été introduit.
+
+Ce backend :
+- repose sur std::alloc,
+- est isolé derrière une feature dédiée (test-provider),
+- n’est utilisé que pour les tests, jamais en production.
+
+Cette séparation permet :
+- de conserver une implémentation minimale et indépendante de std,
+- tout en fournissant à Miri un environnement mémoire compatible avec son interprétation.
+
+Les tests ont été exécutés avec la commande suivante :
+
+```
+cargo +nightly miri test --features test-provider
+```
+
+#### Résultats obtenus
+
+L’ensemble de la suite de tests a été exécuté sous Miri avec succès :
+- tests unitaires,
+- tests d’intégration,
+- scénarios multi-slabs,
+- scénarios d’out-of-memory simulés.
+
 ## 9. Mini “exploit mindset”
 
 Sans implémenter d’exploit, il est possible d’identifier
