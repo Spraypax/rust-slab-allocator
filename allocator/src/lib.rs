@@ -30,9 +30,9 @@ mod tests {
     use core::alloc::Layout;
 
     #[cfg(miri)]
-    type Prov = crate::page_provider::StaticPageProvider<64>;
-    #[cfg(not(miri))]
     type Prov = crate::page_provider::TestPageProvider;
+    #[cfg(not(miri))]
+    type Prov = crate::page_provider::StaticPageProvider<64>;
 
     fn make_allocator() -> crate::allocator::SlabAllocator<Prov> {
         crate::allocator::SlabAllocator::new(Prov::new())
@@ -85,10 +85,12 @@ mod provider_tests {
     use crate::page_provider::PAGE_SIZE;
     use crate::page_provider::PageProvider;
 
+    // Sous Miri, on utilise TestPageProvider pour éviter les faux positifs
+    // Stacked Borrows du provider statique.
     #[cfg(miri)]
-    type Prov = crate::page_provider::StaticPageProvider<64>;
-    #[cfg(not(miri))]
     type Prov = crate::page_provider::TestPageProvider;
+    #[cfg(not(miri))]
+    type Prov = crate::page_provider::StaticPageProvider<64>;
 
     #[test]
     fn page_is_4096_aligned() {

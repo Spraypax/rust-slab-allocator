@@ -53,16 +53,12 @@ impl<const N: usize> StaticPageProvider<N> {
 	}
 
     fn page_ptr(&self, idx: usize) -> NonNull<u8> {
-    debug_assert!(idx < N);
+    // On évite `self.pool[idx]` (indexing => création d'une référence => retag Miri).
+    let cell_ptr = core::ptr::addr_of!(self.pool[idx]); // *const UnsafeCell<Page>
+    let page_ptr = unsafe { (*cell_ptr).get().cast::<u8>() }; // *mut u8
 
-    // SAFETY:
-    // - idx < N
-    // - pool vit aussi longtemps que self
-    // - UnsafeCell autorise l'aliasing pour Miri (interior mutability)
-    let page: *mut u8 = unsafe { self.pool[idx].get().cast::<u8>() };
-
-    // SAFETY: page provient du pool, donc non-null.
-    unsafe { NonNull::new_unchecked(page) }
+    // SAFETY: idx < N garanti par l'appelant, et la page dans le pool est non-null.
+    unsafe { NonNull::new_unchecked(page_ptr) }
 }
 
     fn index_from_ptr(&self, ptr: NonNull<u8>) -> Option<usize> {
@@ -185,6 +181,15 @@ pub mod test_provider {
             unsafe { dealloc(ptr.as_ptr(), layout) };
         }
     }
+    impl Drop for TestPageProvider {
+	    fn drop(&mut self) {
+		while let Some(p) = self.pages.pop() {
+		    unsafe {
+		        std::alloc::dealloc(p.as_ptr(), std::alloc::Layout::from_size_align_unchecked(PAGE_SIZE, PAGE_SIZE));
+		    }
+		}
+	    }
+	}
 }
-#[cfg(all(test, not(miri)))]
+#[cfg(test)]
 pub use self::test_provider::TestPageProvider;
