@@ -176,3 +176,38 @@ cargo build
 ```
 cargo test
 ```
+---
+
+## 🧪 Bonus — Validation avec Miri
+
+En complément des tests classiques, l’allocateur a été validé à l’aide de **Miri**,
+l’interpréteur Rust permettant de détecter dynamiquement les **Undefined Behavior**
+liés à l’utilisation de code `unsafe`.
+
+Miri vérifie notamment :
+- les règles d’aliasing (Stacked Borrows),
+- l’absence de use-after-free,
+- l’absence de double free,
+- la validité des accès mémoire,
+- l’absence de fuites mémoire.
+
+### Intérêt pour ce projet
+
+Ce bonus est particulièrement pertinent car l’allocateur :
+- manipule des pointeurs bruts (`*mut u8`),
+- implémente une **freelist intrusive**,
+- repose sur des invariants mémoire non exprimables par le type system.
+
+La validation avec Miri apporte donc une **garantie supplémentaire de sûreté**
+sur les blocs `unsafe`.
+
+### Exécution sous Miri
+
+Un backend de fourniture de pages dédié aux tests a été introduit,
+activable via une *feature* spécifique.
+
+Commande utilisée :
+
+```bash
+cargo +nightly miri test --features test-provider
+```
