@@ -56,8 +56,9 @@ impl Slab {
         let obj_size = obj_size.max(min_obj);
 
         // Header au début de page
-        let base = page.as_ptr() as usize;
-        let hdr_ptr = base as *mut SlabHeader;
+        let base_ptr = page.as_ptr(); // *mut u8
+	let base = base_ptr as usize;
+	let hdr_ptr = base_ptr.cast::<SlabHeader>();
 
         // Zone objets après le header
         let hdr_size = mem::size_of::<SlabHeader>();
@@ -100,31 +101,37 @@ impl Slab {
             hdr: NonNull::new_unchecked(hdr_ptr),
         };
 
-        // Remplir la freelist (LIFO) : push en reverse pour obtenir ordre croissant si on veut.
-        for i in (0..slab.capacity() as usize).rev() {
-            let obj_addr = (start + i * obj_size) as *mut u8;
-            let obj = NonNull::new(obj_addr)?;
-            // SAFETY:
-            // - obj pointe dans la page du slab
-            // - obj est aligné sur align_up (start) + i*obj_size (obj_size >= pointer size)
-            // - objet libre => on peut écrire le next pointer
-            slab.hdr.as_mut().freelist.push(obj);
-        }
+	let start_off = start - base;
+	
+        // Remplir la freelist (LIFO) : push en reverse pour obtenir ordre croissant si on veut.        
+	for i in (0..slab.capacity() as usize).rev() {
+	    let off = start_off + i * obj_size;
+
+	    // SAFETY:
+	    // - off est dans la page (capacity calculée à partir de available/obj_size)
+	    // - base_ptr est une page valide PAGE_SIZE bytes
+	    let obj_addr = unsafe { base_ptr.add(off) };
+
+	    let obj = NonNull::new(obj_addr)?;
+	    // SAFETY: objet libre, on peut écrire le pointeur next dans l’objet
+	    slab.hdr.as_mut().freelist.push(obj);
+	}
 
         Some(slab)
     }
 
-    /// Alloue un objet depuis ce slab.
-    pub fn alloc(&mut self) -> Option<NonNull<u8>> {
-        unsafe {
-            // # Safety
-            // Les pointeurs stockés dans la freelist ont été initialisés par init()
-            // et restent dans la page tant que le slab est vivant.
-            let ptr = self.hdr.as_mut().freelist.pop()?;
-            self.hdr.as_mut().inuse = self.hdr.as_ref().inuse.saturating_add(1);
-            Some(ptr)
-        }
-    }
+    	/// Alloue un objet depuis ce slab.
+	pub fn alloc(&mut self) -> Option<NonNull<u8>> {
+	    // SAFETY:
+	    // - self.hdr pointe vers un SlabHeader valide dans une page vivante.
+	    // - freelist contient des pointeurs initialisés par Slab::init().
+	    unsafe {
+		let hdr = self.hdr.as_mut();
+		let ptr = hdr.freelist.pop()?;
+		hdr.inuse = hdr.inuse.saturating_add(1);
+		Some(ptr)
+	    }
+	}
 
     /// Libère un objet dans ce slab.
     ///
@@ -132,9 +139,13 @@ impl Slab {
     /// - `ptr` doit appartenir à ce slab.
     /// - `ptr` ne doit pas être déjà libéré (pas de double free).
     pub unsafe fn free(&mut self, ptr: NonNull<u8>) {
-        self.hdr.as_mut().freelist.push(ptr);
-        self.hdr.as_mut().inuse = self.hdr.as_ref().inuse.saturating_sub(1);
-    }
+	    // SAFETY:
+	    // - self.hdr est un header valide.
+	    // - ptr appartient à ce slab (précondition) et peut recevoir le next pointer de freelist.
+	    let hdr = self.hdr.as_mut();
+	    hdr.freelist.push(ptr);
+	    hdr.inuse = hdr.inuse.saturating_sub(1);
+	}
 
     pub fn capacity(&self) -> u16 {
     	// SAFETY: self.hdr pointe vers un SlabHeader écrit par Slab::init dans une page vivante
