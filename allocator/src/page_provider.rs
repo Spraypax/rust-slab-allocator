@@ -57,7 +57,7 @@ impl<const N: usize> StaticPageProvider<N> {
     // - `self.pool.get()` pointe vers le tableau [Page; N] vivant aussi longtemps que `self`.
     // - `idx < N` est garanti par l'appelant.
     // - On ne crée pas de référence `&mut` sur la page ici : on ne fait que fabriquer un raw pointer stable.
-    let base: *mut Page = unsafe { (*self.pool.get()).as_mut_ptr() };
+    let base: *mut Page = self.pool.get().cast::<Page>();
     let page: *mut u8 = unsafe { base.add(idx) } as *mut u8;
 
     // SAFETY: `page` est non-null et pointe dans le pool.
@@ -142,7 +142,7 @@ mod static_provider_tests {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(miri)))]
 pub mod test_provider {
     use super::*;
     use std::alloc::{alloc, dealloc, Layout};
@@ -185,5 +185,5 @@ pub mod test_provider {
         }
     }
 }
-#[cfg(test)]
+#[cfg(all(test, not(miri)))]
 pub use self::test_provider::TestPageProvider;

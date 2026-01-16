@@ -1,5 +1,4 @@
 use core::ptr::NonNull;
-
 use crate::page_provider::PageProvider;
 use crate::slab::{Slab, SlabHeader};
 

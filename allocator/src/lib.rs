@@ -28,17 +28,14 @@ pub fn size_class_index(size: usize) -> Option<usize> {
 #[cfg(test)]
 mod tests {
     use core::alloc::Layout;
-    use crate::allocator::SlabAllocator;
 
-    // Sous Miri, on évite le provider basé sur std::alloc (sinon Miri détecte des leaks).
     #[cfg(miri)]
     type Prov = crate::page_provider::StaticPageProvider<64>;
     #[cfg(not(miri))]
     type Prov = crate::page_provider::TestPageProvider;
 
-    fn make_allocator() -> SlabAllocator<Prov> {
-        let provider = Prov::new();
-        SlabAllocator::new(provider)
+    fn make_allocator() -> crate::allocator::SlabAllocator<Prov> {
+        crate::allocator::SlabAllocator::new(Prov::new())
     }
 
     #[test]
@@ -88,9 +85,14 @@ mod provider_tests {
     use crate::page_provider::PAGE_SIZE;
     use crate::page_provider::PageProvider;
 
+    #[cfg(miri)]
+    type Prov = crate::page_provider::StaticPageProvider<64>;
+    #[cfg(not(miri))]
+    type Prov = crate::page_provider::TestPageProvider;
+
     #[test]
     fn page_is_4096_aligned() {
-        let mut p = crate::page_provider::TestPageProvider::new();
+        let mut p = Prov::new();
         let page = p.alloc_page().expect("alloc page");
         assert_eq!((page.as_ptr() as usize) % PAGE_SIZE, 0);
         p.dealloc_page(page);

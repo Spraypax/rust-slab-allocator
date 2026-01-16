@@ -203,12 +203,16 @@ fn align_up(x: usize, a: usize) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::page_provider::TestPageProvider;
     use crate::page_provider::PageProvider;
+
+    #[cfg(miri)]
+    type Prov = crate::page_provider::StaticPageProvider<4>;
+    #[cfg(not(miri))]
+    type Prov = crate::page_provider::TestPageProvider;
 
     #[test]
     fn slab_init_alloc_free() {
-        let mut prov = TestPageProvider::new();
+        let mut prov = Prov::new();
         let page = prov.alloc_page().expect("page");
 
         let mut slab = unsafe { Slab::init(page, 32, 8).expect("slab init") };

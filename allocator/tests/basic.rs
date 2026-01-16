@@ -1,13 +1,21 @@
 use core::alloc::Layout;
 
-use allocator::page_provider::StaticPageProvider;
 use allocator::SlabAllocator;
+
+#[cfg(not(miri))]
+use allocator::page_provider::StaticPageProvider;
+
+#[cfg(miri)]
+use allocator::page_provider::TestPageProvider;
 
 const N_PAGES: usize = 64;
 
 #[test]
 fn alloc_free_reuse_same_sizeclass() {
+    #[cfg(not(miri))]
     let provider = StaticPageProvider::<N_PAGES>::new();
+    #[cfg(miri)]
+    let provider = TestPageProvider::new();
     let mut a = SlabAllocator::new(provider);
 
     let layout = Layout::from_size_align(16, 8).unwrap();
@@ -25,7 +33,10 @@ fn alloc_free_reuse_same_sizeclass() {
 
 #[test]
 fn unsupported_size_returns_null() {
+    #[cfg(not(miri))]
     let provider = StaticPageProvider::<N_PAGES>::new();
+    #[cfg(miri)]
+    let provider = TestPageProvider::new();
     let mut a = SlabAllocator::new(provider);
 
     let layout = Layout::from_size_align(4096, 8).unwrap();
@@ -35,7 +46,10 @@ fn unsupported_size_returns_null() {
 
 #[test]
 fn alignment_too_large_returns_null() {
+    #[cfg(not(miri))]
     let provider = StaticPageProvider::<N_PAGES>::new();
+    #[cfg(miri)]
+    let provider = TestPageProvider::new();
     let mut a = SlabAllocator::new(provider);
 
     let layout = Layout::from_size_align(32, 64).unwrap();
@@ -45,7 +59,10 @@ fn alignment_too_large_returns_null() {
 
 #[test]
 fn alloc_multiple_then_free_all() {
+    #[cfg(not(miri))]
     let provider = StaticPageProvider::<N_PAGES>::new();
+    #[cfg(miri)]
+    let provider = TestPageProvider::new();
     let mut a = SlabAllocator::new(provider);
 
     let layout = Layout::from_size_align(64, 8).unwrap();
@@ -106,7 +123,10 @@ fn dealloc_goes_to_correct_slab() {
 
 #[test]
 fn allocator_oom_returns_null() {
+    #[cfg(not(miri))]
     let provider = StaticPageProvider::<1>::new();
+    #[cfg(miri)]
+    let provider = LimitedProvider::new(1);
     let mut a = SlabAllocator::new(provider);
 
     let layout = Layout::from_size_align(2048, 8).unwrap();
@@ -125,3 +145,34 @@ fn allocator_oom_returns_null() {
     let p_oom = a.alloc(layout);
     assert!(p_oom.is_null());
 }
+
+#[cfg(miri)]
+struct LimitedProvider {
+    inner: TestPageProvider,
+    remaining: usize,
+}
+
+#[cfg(miri)]
+impl LimitedProvider {
+    fn new(limit: usize) -> Self {
+        Self { inner: TestPageProvider::new(), remaining: limit }
+    }
+}
+
+#[cfg(miri)]
+impl PageProvider for LimitedProvider {
+    fn alloc_page(&mut self) -> Option<core::ptr::NonNull<u8>> {
+        if self.remaining == 0 {
+            return None;
+        }
+        let p = self.inner.alloc_page()?;
+        self.remaining -= 1;
+        Some(p)
+    }
+
+    fn dealloc_page(&mut self, ptr: core::ptr::NonNull<u8>) {
+        self.inner.dealloc_page(ptr);
+        self.remaining += 1;
+    }
+}
+
