@@ -10,4 +10,8 @@ path = "src/lib.rs"
 default = []
 # feature optionnelle
 testing = []
-test-provider = []
+# Active std pour les builds dev/tests (crate reste no_std par défaut)
+std = []
+
+# Provider de test basé sur std::alloc + Vec (pour Miri / tests d'intégration)
+test-provider = ["std"]

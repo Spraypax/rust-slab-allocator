@@ -141,6 +141,7 @@ mod static_provider_tests {
 
 #[cfg(any(test, feature = "test-provider"))]
 pub mod test_provider {
+    extern crate std;
     use super::*;
     use std::alloc::{alloc, dealloc, Layout};
     use std::vec::Vec;

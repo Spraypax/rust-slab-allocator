@@ -1,6 +1,8 @@
 use core::alloc::Layout;
 
 use allocator::SlabAllocator;
+
+#[cfg(miri)]
 use allocator::PageProvider;
 
 #[cfg(not(miri))]
@@ -86,7 +88,10 @@ fn alloc_multiple_then_free_all() {
 
 #[test]
 fn dealloc_goes_to_correct_slab() {
+    #[cfg(not(miri))]
     let provider = StaticPageProvider::<N_PAGES>::new();
+    #[cfg(miri)]
+    let provider = TestPageProvider::new();
     let mut a = SlabAllocator::new(provider);
 
     let layout = Layout::from_size_align(8, 8).unwrap();
@@ -111,7 +116,6 @@ fn dealloc_goes_to_correct_slab() {
     unsafe { a.dealloc(p0, layout) };
 
     // 4) Prochaine alloc doit venir du slab HEAD (slab 2), pas retourner p0
-    // Si bug ancien: p0 est poussé dans la freelist du slab 2 et ressort immédiatement => base0.
     let p_next = a.alloc(layout);
     assert!(!p_next.is_null());
     let base_next = (p_next as usize) & !(4096 - 1);

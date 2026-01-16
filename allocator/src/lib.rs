@@ -1,6 +1,6 @@
-#![no_std]
+#![cfg_attr(not(feature = "std"), no_std)]
 
-#[cfg(test)]
+#[cfg(feature = "std")]
 extern crate std;
 
 pub mod page_provider;
