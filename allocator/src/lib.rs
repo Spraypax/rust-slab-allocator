@@ -28,13 +28,22 @@ pub fn size_class_index(size: usize) -> Option<usize> {
 #[cfg(test)]
 mod tests {
     use core::alloc::Layout;
-    use crate::page_provider::TestPageProvider;
     use crate::allocator::SlabAllocator;
+
+    // Sous Miri, on évite le provider basé sur std::alloc (sinon Miri détecte des leaks).
+    #[cfg(miri)]
+    type Prov = crate::page_provider::StaticPageProvider<64>;
+    #[cfg(not(miri))]
+    type Prov = crate::page_provider::TestPageProvider;
+
+    fn make_allocator() -> SlabAllocator<Prov> {
+        let provider = Prov::new();
+        SlabAllocator::new(provider)
+    }
 
     #[test]
     fn alloc_dealloc_basic() {
-        let provider = TestPageProvider::new();
-        let mut a = SlabAllocator::new(provider);
+        let mut a = make_allocator();
 
         let layout = Layout::from_size_align(32, 8).unwrap();
 
@@ -55,8 +64,7 @@ mod tests {
 
     #[test]
     fn unsupported_size_returns_null() {
-        let provider = TestPageProvider::new();
-        let mut a = SlabAllocator::new(provider);
+        let mut a = make_allocator();
 
         let layout = Layout::from_size_align(4096 * 2, 8).unwrap();
         let p = a.alloc(layout);
@@ -65,8 +73,7 @@ mod tests {
 
     #[test]
     fn alignment_constraint_respected_by_routing() {
-        let provider = TestPageProvider::new();
-        let mut a = SlabAllocator::new(provider);
+        let mut a = make_allocator();
 
         let layout = Layout::from_size_align(24, 64).unwrap();
         let p = a.alloc(layout);
@@ -74,7 +81,6 @@ mod tests {
         // On refuse car align > size class (allocateur minimal)
         assert!(p.is_null());
     }
-
 }
 
 #[cfg(test)]
