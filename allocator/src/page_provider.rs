@@ -30,58 +30,59 @@ struct Page([u8; PAGE_SIZE]);
 /// - Free: push sur la stack.
 /// - OOM: None.
 pub struct StaticPageProvider<const N: usize> {
-    pool: UnsafeCell<[Page; N]>,
+    pool: [UnsafeCell<Page>; N],
     free_stack: [usize; N],
     free_len: usize,
 }
 
 impl<const N: usize> StaticPageProvider<N> {
     /// Crée un provider avec N pages disponibles.
-    pub const fn new() -> Self {
-        let mut free_stack = [0usize; N];
-        let mut i = 0;
-        while i < N {
-            free_stack[i] = i;
-            i += 1;
-        }
+    pub fn new() -> Self {
+	    let mut free_stack = [0usize; N];
+	    let mut i = 0;
+	    while i < N {
+		free_stack[i] = i;
+		i += 1;
+	    }
 
-        Self {
-            pool: UnsafeCell::new([Page([0u8; PAGE_SIZE]); N]),
-            free_stack,
-            free_len: N,
-        }
-    }
+	    Self {
+		pool: core::array::from_fn(|_| UnsafeCell::new(Page([0u8; PAGE_SIZE]))),
+		free_stack,
+		free_len: N,
+	    }
+	}
 
-    fn page_ptr(&mut self, idx: usize) -> NonNull<u8> {
+    fn page_ptr(&self, idx: usize) -> NonNull<u8> {
+    debug_assert!(idx < N);
+
     // SAFETY:
-    // - `self.pool.get()` pointe vers le tableau [Page; N] vivant aussi longtemps que `self`.
-    // - `idx < N` est garanti par l'appelant.
-    // - On ne crée pas de référence `&mut` sur la page ici : on ne fait que fabriquer un raw pointer stable.
-    let base: *mut Page = self.pool.get().cast::<Page>();
-    let page: *mut u8 = unsafe { base.add(idx) } as *mut u8;
+    // - idx < N
+    // - pool vit aussi longtemps que self
+    // - UnsafeCell autorise l'aliasing pour Miri (interior mutability)
+    let page: *mut u8 = unsafe { self.pool[idx].get().cast::<u8>() };
 
-    // SAFETY: `page` est non-null et pointe dans le pool.
+    // SAFETY: page provient du pool, donc non-null.
     unsafe { NonNull::new_unchecked(page) }
 }
 
     fn index_from_ptr(&self, ptr: NonNull<u8>) -> Option<usize> {
-        let base = self.pool.get() as usize;
-        let p = ptr.as_ptr() as usize;
+	    let base = self.page_ptr(0).as_ptr() as usize;
+	    let p = ptr.as_ptr() as usize;
 
-        let page_size = core::mem::size_of::<Page>();
-        let total = N * page_size;
+	    let page_size = core::mem::size_of::<Page>(); // == PAGE_SIZE
+	    let total = N * page_size;
 
-        if p < base || p >= base + total {
-            return None;
-        }
+	    if p < base || p >= base + total {
+		return None;
+	    }
 
-        let off = p - base;
-        if off % page_size != 0 {
-            return None;
-        }
+	    let off = p - base;
+	    if off % page_size != 0 {
+		return None;
+	    }
 
-        Some(off / page_size)
-    }
+	    Some(off / page_size)
+	}
 }
 
 impl<const N: usize> PageProvider for StaticPageProvider<N> {
