@@ -12,6 +12,8 @@ default = []
 testing = []
 # Active std pour les builds dev/tests (crate reste no_std par défaut)
 std = []
+test-provider = []
+
 
 # Provider de test basé sur std::alloc + Vec (pour Miri / tests d'intégration)
 test-provider = ["std"]

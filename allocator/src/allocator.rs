@@ -65,6 +65,7 @@ impl<P: PageProvider> SlabAllocator<P> {
 
     /// # Safety
     /// - `ptr` doit provenir d’un `alloc(layout)` de CET allocator.
+    /// - `layout` doit être identique à celui utilisé lors de l'allocation (même size/align).
     /// - pas de double-free.
     pub unsafe fn dealloc(&mut self, ptr: *mut u8, layout: Layout) {
         if ptr.is_null() {
