@@ -12,6 +12,7 @@ libfuzzer-sys = "0.4"
 
 [dependencies.allocator]
 path = ".."
+features = ["test-provider"]
 
 [[bin]]
 name = "fuzz_target_1"
