@@ -357,6 +357,7 @@ Notre allocateur reprend les concepts fondamentaux de SLUB :
 - **allocation par pages** via un PageProvider (4096 bytes),
 - **découpage des pages en objets**,
 - **freelist intrusive**, stockée directement dans les objets libres,
+- **OOM allocateur (retour NULL)** : un test d’intégration vérifie que `SlabAllocator::alloc()` retourne `null` lorsque le `PageProvider` n’a plus de pages disponibles. L’objectif est de valider le comportement “out of memory” sans dépendre d’un nombre exact d’objets par page (qui varie selon `obj_size`, `align` et le header).
 - API minimale `alloc(layout)` / `dealloc(ptr, layout)`.
 
 Ces éléments permettent de reproduire le cycle de vie essentiel
@@ -370,6 +371,8 @@ ne sont pas implémentées :
 - gestion fine des états full/partial/free,
 - mécanismes avancés de synchronisation,
 - hardening (poisoning, randomisation).
+- **Pas d’API globale `alloc/dealloc`** : l’allocateur est volontairement exposé uniquement via une instance `SlabAllocator`. On évite un état global (singleton) en `no_std` et on garde un modèle simple : l’appelant possède son allocateur et route explicitement les allocations via cette instance.
+
 
 Ces absences sont assumées et documentées.
 
@@ -387,6 +390,8 @@ Ce parallèle permet de relier directement les concepts théoriques
 à une implémentation concrète.
 
 ### 8.4 Bonus — Validation mémoire avec Miri
+
+Avant de parler de Miri, un point important côté implémentation : **chaque zone `unsafe` est documentée**. Chaque `unsafe fn` et chaque bloc `unsafe { ... }` possède une section `/// # Safety` (ou un commentaire Safety local) décrivant les invariants attendus : provenance des pointeurs, validité mémoire, alignement, absence de double free, et contraintes de lifetime. L’objectif est de rendre l’unsafe “audit-able” et cohérent avec les garanties minimales du projet.
 
 Dans le cadre du bonus, notre implémentation de l’allocateur slab a été
 validée à l’aide de l’outil Miri.
